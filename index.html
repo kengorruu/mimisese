@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌫️ 미세먼지 경보 발령 현황 대시보드</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #60a5fa;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --info: #06b6d4;
+            --dark: #1e293b;
+            --darker: #0f172a;
+            --card-bg: rgba(255, 255, 255, 0.92);
+            --card-border: rgba(255, 255, 255, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 25%, #2563eb 50%, #7c3aed 75%, #1e293b 100%);
+            background-attachment: fixed;
+            color: #1e293b;
+        }
+
+        /* 배경 장식 요소 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 40%, rgba(96, 165, 250, 0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 60%, rgba(124, 58, 237, 0.06) 0%, transparent 50%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* 헤더 */
+        .dashboard-header {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1.5rem 0;
+            position: relative;
+            z-index: 10;
+        }
+
+        .dashboard-header h1 {
+            font-weight: 900;
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa, #60a5fa);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { background-position: 0% center; }
+            50% { background-position: 200% center; }
+        }
+
+        .dashboard-header .subtitle {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            font-weight: 300;
+        }
+
+        .main-content {
+            position: relative;
+            z-index: 5;
+            padding: 2rem 0 4rem;
+        }
+
+        /* 연도 선택 필터 */
+        .filter-bar {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar label {
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .filter-bar select,
+        .filter-bar input {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        .filter-bar select option {
+            background: #1e293b;
+            color: #fff;
+        }
+
+        .filter-bar .btn-search {
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            border: none;
+            color: #fff;
+            padding: 0.5rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-bar .btn-search:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+        }
+
+        /* 통계 카드 */
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid var(--card-border);
+            padding: 1.5rem;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .stat-card:nth-child(1)::before { background: linear-gradient(90deg, var(--primary), var(--primary-light)); }
+        .stat-card:nth-child(2)::before { background: linear-gradient(90deg, var(--success), #34d399); }
+        .stat-card:nth-child(3)::before { background: linear-gradient(90deg, var(--info), #22d3ee); }
+        .stat-card:nth-child(4)::before { background: linear-gradient(90deg, var(--warning), #fbbf24); }
+
+        .stat-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card .icon-box {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card:nth-child(1) .icon-box { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: var(--primary); }
+        .stat-card:nth-child(2) .icon-box { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: var(--success); }
+        .stat-card:nth-child(3) .icon-box { background: linear-gradient(135deg, #cffafe, #a5f3fc); color: var(--info); }
+        .stat-card:nth-child(4) .icon-box { background: linear-gradient(135deg, #fef3c7, #fde68a); color: var(--warning); }
+
+        .stat-card .stat-label {
+            color: #64748b;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: 900;
+            color: var(--dark);
+            line-height: 1.2;
+        }
+
+        .stat-card .stat-detail {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            margin-top: 0.5rem;
+        }
+
+        /* 차트 카드 */
+        .chart-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid var(--card-border);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .chart-card:hover {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+        }
+
+        .chart-card h5 {
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* 데이터 테이블 */
+        .table-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid var(--card-border);
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+
+        .table-card h5 {
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .table-responsive {
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.85rem;
+        }
+
+        .data-table thead th {
+            background: linear-gradient(135deg, var(--dark), #334155);
+            color: #fff;
+            padding: 0.85rem 1rem;
+            font-weight: 600;
+            text-align: center;
+            white-space: nowrap;
+            border: none;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .data-table tbody tr {
+            transition: all 0.2s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(37, 99, 235, 0.06);
+            transform: scale(1.002);
+        }
+
+        .data-table tbody td {
+            padding: 0.75rem 1rem;
+            text-align: center;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+
+        .badge-warning-custom {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #78350f;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.78rem;
+        }
+
+        .badge-danger-custom {
+            background: linear-gradient(135deg, #f87171, #ef4444);
+            color: #fff;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.78rem;
+        }
+
+        .badge-pm10 {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+
+        .badge-pm25 {
+            background: rgba(124, 58, 237, 0.1);
+            color: #7c3aed;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+
+        /* 페이지네이션 */
+        .table-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .table-pagination button {
+            background: rgba(37, 99, 235, 0.1);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+            color: var(--primary);
+            border-radius: 8px;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            font-family: 'Noto Sans KR';
+            transition: all 0.2s;
+        }
+
+        .table-pagination button:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .table-pagination button.active {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .table-pagination button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* 로딩 애니메이션 */
+        .loading-container {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: var(--primary-light);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 푸터 */
+        .dashboard-footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
+            position: relative;
+            z-index: 5;
+        }
+
+        /* 반응형 */
+        @media (max-width: 768px) {
+            .dashboard-header h1 { font-size: 1.3rem; }
+            .stat-card .stat-value { font-size: 1.5rem; }
+            .filter-bar { flex-direction: column; align-items: stretch; }
+            .stat-card { margin-bottom: 1rem; }
+        }
+
+        /* 부드러운 등장 애니메이션 */
+        .fade-in-up {
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+        .delay-6 { animation-delay: 0.6s; }
+
+        /* 검색 하이라이트 */
+        .search-box {
+            position: relative;
+        }
+        .search-box input {
+            width: 100%;
+            padding-left: 2.5rem;
+        }
+        .search-box i {
+            position: absolute;
+            left: 0.8rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 스크롤바 커스텀 */
+        .table-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+        .table-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 헤더 -->
+    <header class="dashboard-header">
+        <div class="container">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h1><i class="bi bi-cloud-haze2"></i> 미세먼지 경보 발령 현황 대시보드</h1>
+                    <p class="subtitle">공공데이터포털 API 활용 | 한국환경공단 에어코리아</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success" id="statusBadge">
+                        <i class="bi bi-circle-fill" style="font-size:0.5rem"></i> 데이터 로드 중...
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="main-content">
+        <div class="container">
+
+            <!-- 필터 바 -->
+            <div class="filter-bar fade-in-up">
+                <label><i class="bi bi-funnel"></i> 필터</label>
+                <div>
+                    <select id="yearFilter" class="form-select-sm">
+                        <option value="all">전체 연도</option>
+                    </select>
+                </div>
+                <div>
+                    <select id="itemFilter" class="form-select-sm">
+                        <option value="all">전체 항목</option>
+                        <option value="PM10">미세먼지 (PM10)</option>
+                        <option value="PM25">초미세먼지 (PM2.5)</option>
+                    </select>
+                </div>
+                <div>
+                    <select id="levelFilter" class="form-select-sm">
+                        <option value="all">전체 단계</option>
+                        <option value="주의보">주의보</option>
+                        <option value="경보">경보</option>
+                    </select>
+                </div>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="regionSearch" placeholder="지역 검색..." class="form-control-sm">
+                </div>
+                <button class="btn-search" onclick="applyFilters()">
+                    <i class="bi bi-arrow-clockwise"></i> 조회
+                </button>
+            </div>
+
+            <!-- 통계 카드 -->
+            <div class="row g-3 mb-4" id="statsRow">
+                <div class="col-6 col-lg-3 fade-in-up delay-1">
+                    <div class="stat-card">
+                        <div class="icon-box"><i class="bi bi-exclamation-triangle"></i></div>
+                        <div class="stat-label">총 경보 발령 수</div>
+                        <div class="stat-value" id="totalAlerts">-</div>
+                        <div class="stat-detail" id="totalAlertsDetail">데이터 로드 중</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3 fade-in-up delay-2">
+                    <div class="stat-card">
+                        <div class="icon-box"><i class="bi bi-geo-alt"></i></div>
+                        <div class="stat-label">영향 지역 수</div>
+                        <div class="stat-value" id="totalRegions">-</div>
+                        <div class="stat-detail" id="totalRegionsDetail">데이터 로드 중</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3 fade-in-up delay-3">
+                    <div class="stat-card">
+                        <div class="icon-box"><i class="bi bi-pin-map"></i></div>
+                        <div class="stat-label">영향 권역 수</div>
+                        <div class="stat-value" id="totalAreas">-</div>
+                        <div class="stat-detail" id="totalAreasDetail">데이터 로드 중</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3 fade-in-up delay-4">
+                    <div class="stat-card">
+                        <div class="icon-box"><i class="bi bi-shield-exclamation"></i></div>
+                        <div class="stat-label">주요 경보 단계</div>
+                        <div class="stat-value" id="mainLevel">-</div>
+                        <div class="stat-detail" id="mainLevelDetail">데이터 로드 중</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 차트 영역 -->
+            <div class="row g-3 mb-4">
+                <!-- 지역별 경보 현황 (막대 그래프) -->
+                <div class="col-lg-7 fade-in-up delay-4">
+                    <div class="chart-card">
+                        <h5><i class="bi bi-bar-chart" style="color:var(--primary)"></i> 지역별 경보 현황</h5>
+                        <div id="chartRegion" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+                <!-- 경보 단계별 분포 (원형 차트) -->
+                <div class="col-lg-5 fade-in-up delay-5">
+                    <div class="chart-card">
+                        <h5><i class="bi bi-pie-chart" style="color:var(--warning)"></i> 경보 단계별 분포</h5>
+                        <div id="chartLevel" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <!-- 권역별 경보 현황 (수평 막대 그래프) -->
+                <div class="col-lg-6 fade-in-up delay-5">
+                    <div class="chart-card">
+                        <h5><i class="bi bi-bar-chart-steps" style="color:var(--info)"></i> 권역별 경보 현황</h5>
+                        <div id="chartArea" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+                <!-- 월별 경보 추이 -->
+                <div class="col-lg-6 fade-in-up delay-6">
+                    <div class="chart-card">
+                        <h5><i class="bi bi-graph-up" style="color:var(--success)"></i> 월별 경보 발령 추이</h5>
+                        <div id="chartMonthly" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 상세 데이터 테이블 -->
+            <div class="table-card fade-in-up delay-6">
+                <h5><i class="bi bi-table" style="color:var(--dark)"></i> 상세 경보 데이터
+                    <span class="badge bg-secondary ms-2" id="tableCount" style="font-size:0.75rem;">0건</span>
+                </h5>
+                <div class="table-responsive table-scroll" style="max-height:500px; overflow-y:auto;">
+                    <table class="data-table" id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>번호</th>
+                                <th>발령일</th>
+                                <th>지역</th>
+                                <th>권역</th>
+                                <th>항목</th>
+                                <th>경보단계</th>
+                                <th>발령시간</th>
+                                <th>발령농도</th>
+                                <th>해제시간</th>
+                                <th>해제농도</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination" id="pagination"></div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="dashboard-footer">
+        <div class="container">
+            <p>데이터 출처: 한국환경공단 에어코리아 | 공공데이터포털 Open API</p>
+            <p>© 2026 미세먼지 경보 대시보드 프로젝트</p>
+        </div>
+    </footer>
+
+    <script>
+        // ============================================================
+        // 전역 변수
+        // ============================================================
+        let rawData = [];        // 원본 데이터
+        let filteredData = [];   // 필터링된 데이터
+        const ROWS_PER_PAGE = 15;
+        let currentPage = 1;
+
+        // ============================================================
+        // 데이터 로드
+        // ============================================================
+        async function loadData() {
+            try {
+                const response = await fetch('data.json');
+                if (!response.ok) throw new Error('data.json 파일을 찾을 수 없습니다.');
+                rawData = await response.json();
+                
+                // 날짜 기준 내림차순 정렬
+                rawData.sort((a, b) => {
+                    const dateA = a.dataDate + ' ' + (a.issueTime || '');
+                    const dateB = b.dataDate + ' ' + (b.issueTime || '');
+                    return dateB.localeCompare(dateA);
+                });
+
+                filteredData = [...rawData];
+                
+                // 연도 필터 옵션 생성
+                populateYearFilter();
+                
+                // 대시보드 렌더링
+                updateDashboard();
+                
+                document.getElementById('statusBadge').innerHTML = 
+                    '<i class="bi bi-circle-fill" style="font-size:0.5rem"></i> 데이터 로드 완료';
+            } catch (error) {
+                console.error('데이터 로드 실패:', error);
+                document.getElementById('statusBadge').className = 'badge bg-danger';
+                document.getElementById('statusBadge').innerHTML = 
+                    '<i class="bi bi-exclamation-circle"></i> 로드 실패';
+            }
+        }
+
+        // ============================================================
+        // 연도 필터 옵션 자동 생성
+        // ============================================================
+        function populateYearFilter() {
+            const years = [...new Set(rawData.map(d => d.dataDate.substring(0, 4)))].sort().reverse();
+            const select = document.getElementById('yearFilter');
+            years.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y + '년';
+                select.appendChild(opt);
+            });
+        }
+
+        // ============================================================
+        // 필터 적용
+        // ============================================================
+        function applyFilters() {
+            const year = document.getElementById('yearFilter').value;
+            const item = document.getElementById('itemFilter').value;
+            const level = document.getElementById('levelFilter').value;
+            const search = document.getElementById('regionSearch').value.trim().toLowerCase();
+
+            filteredData = rawData.filter(d => {
+                if (year !== 'all' && !d.dataDate.startsWith(year)) return false;
+                if (item !== 'all' && d.itemCode !== item) return false;
+                if (level !== 'all' && d.issueGbn !== level) return false;
+                if (search && !d.districtName.toLowerCase().includes(search) && 
+                    !d.moveName.toLowerCase().includes(search)) return false;
+                return true;
+            });
+
+            currentPage = 1;
+            updateDashboard();
+        }
+
+        // Enter 키로 검색
+        document.getElementById('regionSearch').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') applyFilters();
+        });
+
+        // ============================================================
+        // 대시보드 전체 업데이트
+        // ============================================================
+        function updateDashboard() {
+            updateStats();
+            drawRegionChart();
+            drawLevelChart();
+            drawAreaChart();
+            drawMonthlyChart();
+            renderTable();
+        }
+
+        // ============================================================
+        // 1. 통계 카드 업데이트
+        // ============================================================
+        function updateStats() {
+            const total = filteredData.length;
+            const regions = new Set(filteredData.map(d => d.districtName));
+            const areas = new Set(filteredData.map(d => d.districtName + '-' + d.moveName));
+            
+            const levelCount = {};
+            filteredData.forEach(d => {
+                levelCount[d.issueGbn] = (levelCount[d.issueGbn] || 0) + 1;
+            });
+            const mainLevel = Object.entries(levelCount).sort((a,b) => b[1] - a[1])[0];
+
+            // PM10 vs PM25 비율
+            const pm10Count = filteredData.filter(d => d.itemCode === 'PM10').length;
+            const pm25Count = filteredData.filter(d => d.itemCode === 'PM25').length;
+
+            document.getElementById('totalAlerts').textContent = total.toLocaleString();
+            document.getElementById('totalAlertsDetail').textContent = 
+                `PM10: ${pm10Count}건 / PM2.5: ${pm25Count}건`;
+
+            document.getElementById('totalRegions').textContent = regions.size;
+            document.getElementById('totalRegionsDetail').textContent = 
+                [...regions].slice(0, 5).join(', ') + (regions.size > 5 ? ' 외' : '');
+
+            document.getElementById('totalAreas').textContent = areas.size;
+            document.getElementById('totalAreasDetail').textContent = '전국 권역 기준';
+
+            document.getElementById('mainLevel').textContent = mainLevel ? mainLevel[0] : '-';
+            document.getElementById('mainLevelDetail').textContent = mainLevel 
+                ? `전체의 ${Math.round(mainLevel[1]/total*100)}% (${mainLevel[1]}건)` 
+                : '';
+        }
+
+        // ============================================================
+        // 2-1. 지역별 경보 현황 (막대 그래프)
+        // ============================================================
+        function drawRegionChart() {
+            const regionCount = {};
+            filteredData.forEach(d => {
+                regionCount[d.districtName] = (regionCount[d.districtName] || 0) + 1;
+            });
+
+            const sorted = Object.entries(regionCount).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(s => s[0]);
+            const values = sorted.map(s => s[1]);
+
+            // 색상 그라데이션
+            const colors = values.map((v, i) => {
+                const ratio = i / Math.max(values.length - 1, 1);
+                const r = Math.round(37 + ratio * 200);
+                const g = Math.round(99 + ratio * 50);
+                const b = Math.round(235 - ratio * 100);
+                return `rgb(${r}, ${g}, ${b})`;
+            });
+
+            const trace = {
+                x: labels,
+                y: values,
+                type: 'bar',
+                marker: {
+                    color: colors,
+                    line: { color: 'rgba(255,255,255,0.3)', width: 1 }
+                },
+                hovertemplate: '<b>%{x}</b><br>경보 발령: %{y}건<extra></extra>'
+            };
+
+            const layout = {
+                margin: { t: 20, r: 20, b: 60, l: 50 },
+                xaxis: { tickfont: { family: 'Noto Sans KR', size: 11 }, tickangle: -30 },
+                yaxis: { title: '발령 건수', titlefont: { family: 'Noto Sans KR', size: 12 } },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                hoverlabel: { font: { family: 'Noto Sans KR' } }
+            };
+
+            Plotly.newPlot('chartRegion', [trace], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // ============================================================
+        // 2-2. 경보 단계별 분포 (원형 차트)
+        // ============================================================
+        function drawLevelChart() {
+            const levelCount = {};
+            filteredData.forEach(d => {
+                const key = d.itemCode === 'PM10' ? 'PM10 ' + d.issueGbn : 'PM2.5 ' + d.issueGbn;
+                levelCount[key] = (levelCount[key] || 0) + 1;
+            });
+
+            const labels = Object.keys(levelCount);
+            const values = Object.values(levelCount);
+
+            const colorMap = {
+                'PM10 주의보': '#60a5fa',
+                'PM10 경보': '#2563eb',
+                'PM2.5 주의보': '#fbbf24',
+                'PM2.5 경보': '#ef4444'
+            };
+            const colors = labels.map(l => colorMap[l] || '#94a3b8');
+
+            const trace = {
+                labels: labels,
+                values: values,
+                type: 'pie',
+                hole: 0.45,
+                marker: {
+                    colors: colors,
+                    line: { color: '#fff', width: 2 }
+                },
+                textinfo: 'label+percent',
+                textfont: { family: 'Noto Sans KR', size: 12 },
+                hovertemplate: '<b>%{label}</b><br>%{value}건 (%{percent})<extra></extra>'
+            };
+
+            const layout = {
+                margin: { t: 20, r: 20, b: 20, l: 20 },
+                showlegend: true,
+                legend: { 
+                    font: { family: 'Noto Sans KR', size: 11 },
+                    orientation: 'h',
+                    y: -0.1 
+                },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                hoverlabel: { font: { family: 'Noto Sans KR' } }
+            };
+
+            Plotly.newPlot('chartLevel', [trace], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // ============================================================
+        // 2-3. 권역별 경보 현황 (수평 막대 그래프)
+        // ============================================================
+        function drawAreaChart() {
+            const areaCount = {};
+            filteredData.forEach(d => {
+                const key = d.districtName + ' ' + d.moveName;
+                areaCount[key] = (areaCount[key] || 0) + 1;
+            });
+
+            const sorted = Object.entries(areaCount).sort((a, b) => a[1] - b[1]).slice(-15);
+            const labels = sorted.map(s => s[0]);
+            const values = sorted.map(s => s[1]);
+
+            const colors = values.map((v, i) => {
+                const ratio = i / Math.max(values.length - 1, 1);
+                return `rgba(6, 182, 212, ${0.3 + ratio * 0.7})`;
+            });
+
+            const trace = {
+                y: labels,
+                x: values,
+                type: 'bar',
+                orientation: 'h',
+                marker: {
+                    color: colors,
+                    line: { color: 'rgba(255,255,255,0.3)', width: 1 }
+                },
+                hovertemplate: '<b>%{y}</b><br>경보 발령: %{x}건<extra></extra>'
+            };
+
+            const layout = {
+                margin: { t: 10, r: 20, b: 40, l: 120 },
+                xaxis: { title: '발령 건수', titlefont: { family: 'Noto Sans KR', size: 12 } },
+                yaxis: { tickfont: { family: 'Noto Sans KR', size: 10 } },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                hoverlabel: { font: { family: 'Noto Sans KR' } }
+            };
+
+            Plotly.newPlot('chartArea', [trace], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // ============================================================
+        // 2-4. 월별 경보 발령 추이 (라인 차트 - 보너스)
+        // ============================================================
+        function drawMonthlyChart() {
+            const monthlyPM10 = {};
+            const monthlyPM25 = {};
+
+            filteredData.forEach(d => {
+                const ym = d.dataDate.substring(0, 7); // YYYY-MM
+                if (d.itemCode === 'PM10') {
+                    monthlyPM10[ym] = (monthlyPM10[ym] || 0) + 1;
+                } else {
+                    monthlyPM25[ym] = (monthlyPM25[ym] || 0) + 1;
+                }
+            });
+
+            const allMonths = [...new Set([
+                ...Object.keys(monthlyPM10), 
+                ...Object.keys(monthlyPM25)
+            ])].sort();
+
+            const tracePM10 = {
+                x: allMonths,
+                y: allMonths.map(m => monthlyPM10[m] || 0),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'PM10 (미세먼지)',
+                line: { color: '#2563eb', width: 3, shape: 'spline' },
+                marker: { size: 7 },
+                hovertemplate: '<b>%{x}</b><br>PM10: %{y}건<extra></extra>'
+            };
+
+            const tracePM25 = {
+                x: allMonths,
+                y: allMonths.map(m => monthlyPM25[m] || 0),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'PM2.5 (초미세먼지)',
+                line: { color: '#ef4444', width: 3, shape: 'spline' },
+                marker: { size: 7 },
+                hovertemplate: '<b>%{x}</b><br>PM2.5: %{y}건<extra></extra>'
+            };
+
+            const layout = {
+                margin: { t: 20, r: 20, b: 50, l: 50 },
+                xaxis: { tickfont: { family: 'Noto Sans KR', size: 10 }, tickangle: -45 },
+                yaxis: { title: '발령 건수', titlefont: { family: 'Noto Sans KR', size: 12 } },
+                legend: { 
+                    font: { family: 'Noto Sans KR', size: 11 },
+                    orientation: 'h',
+                    y: 1.12
+                },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                hoverlabel: { font: { family: 'Noto Sans KR' } }
+            };
+
+            Plotly.newPlot('chartMonthly', [tracePM10, tracePM25], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // ============================================================
+        // 3. 상세 데이터 테이블
+        // ============================================================
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            const totalItems = filteredData.length;
+            const totalPages = Math.ceil(totalItems / ROWS_PER_PAGE);
+
+            document.getElementById('tableCount').textContent = totalItems.toLocaleString() + '건';
+
+            // 현재 페이지 데이터
+            const start = (currentPage - 1) * ROWS_PER_PAGE;
+            const end = start + ROWS_PER_PAGE;
+            const pageData = filteredData.slice(start, end);
+
+            tbody.innerHTML = pageData.map((d, i) => {
+                const levelBadge = d.issueGbn === '경보' 
+                    ? '<span class="badge-danger-custom">경보</span>' 
+                    : '<span class="badge-warning-custom">주의보</span>';
+                const itemBadge = d.itemCode === 'PM10'
+                    ? '<span class="badge-pm10">PM10</span>'
+                    : '<span class="badge-pm25">PM2.5</span>';
+
+                return `<tr>
+                    <td>${start + i + 1}</td>
+                    <td>${d.dataDate}</td>
+                    <td><strong>${d.districtName}</strong></td>
+                    <td>${d.moveName}</td>
+                    <td>${itemBadge}</td>
+                    <td>${levelBadge}</td>
+                    <td>${d.issueTime}</td>
+                    <td><strong>${d.issueVal}</strong> <small>㎍/㎥</small></td>
+                    <td>${d.clearTime || '-'}</td>
+                    <td>${d.clearVal ? d.clearVal + ' <small>㎍/㎥</small>' : '-'}</td>
+                </tr>`;
+            }).join('');
+
+            // 페이지네이션
+            renderPagination(totalPages);
+        }
+
+        function renderPagination(totalPages) {
+            const container = document.getElementById('pagination');
+            if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+            let html = '';
+            html += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goPage(${currentPage - 1})">
+                <i class="bi bi-chevron-left"></i></button>`;
+
+            const maxVisible = 5;
+            let startP = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+            let endP = Math.min(totalPages, startP + maxVisible - 1);
+            if (endP - startP < maxVisible - 1) startP = Math.max(1, endP - maxVisible + 1);
+
+            if (startP > 1) html += `<button onclick="goPage(1)">1</button><span style="color:#94a3b8">...</span>`;
+            for (let p = startP; p <= endP; p++) {
+                html += `<button class="${p === currentPage ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`;
+            }
+            if (endP < totalPages) html += `<span style="color:#94a3b8">...</span><button onclick="goPage(${totalPages})">${totalPages}</button>`;
+
+            html += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="goPage(${currentPage + 1})">
+                <i class="bi bi-chevron-right"></i></button>`;
+
+            container.innerHTML = html;
+        }
+
+        function goPage(page) {
+            currentPage = page;
+            renderTable();
+            document.querySelector('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // ============================================================
+        // 초기 로드
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+
+</body>
+</html>
